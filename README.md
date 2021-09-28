@@ -3,6 +3,10 @@
 [![GitHub release](https://img.shields.io/github/v/release/Snapmali/discord-monitor?include_prereleases)](https://github.com/Snapmali/discord-monitor/releases)
 [![GitHub](https://img.shields.io/github/license/snapmali/discord-monitor)](https://github.com/Snapmali/discord-monitor/blob/master/LICENSE)
 
+### This fork integrates discord.py-self to fix [self-bot](https://github.com/Snapmali/discord-monitor/issues/10) functionality
+### This fork also replaces QQ Push with Line Notify
+
+
 ## 功能介绍
 
 
@@ -12,22 +16,19 @@
 * 用户动态：在指定被监测用户时，可通过Bot监视时可监测用户的用户名及标签更新、Server内昵称更新、在线状态更新、游戏动态更新；使用用户（非Bot）监视时仅可监测用户的用户名及标签更新、Server内昵称更新。
 * Windows 10系统下可将动态推送至通知中心。
 * 可分别自定义消息动态与用户动态推送消息格式。其中对消息动态可通过关键词进行类别匹配与字符替换，支持正则表达式。
-* 可将监测到的动态由[cqhttp-mirai](https://github.com/yyuueexxiinngg/cqhttp-mirai)、[go-cqhttp](https://github.com/Mrs4s/go-cqhttp)等兼容[onebot]('https://github.com/howmanybots/onebot')接口标准的应用推送至QQ私聊及群聊，支持将本脚本与cqhttp应用异地部署。
-* 可在配置文件中设置各QQ用户或群聊是否接受消息动态及用户动态推送
+* 可将监测到的动态由[line-notify](https://github.com/golbin/line-notify)推送至Line Notify。
 
-脚本的实现基于[discord.py库](https://pypi.org/project/discord.py/) 1.7.0以上，QQ推送部分代码参考了[lovezzzxxx](https://github.com/lovezzzxxx)大佬的[livemonitor](https://github.com/lovezzzxxx/livemonitor)脚本，在此感谢。
+脚本的实现基于[discord.py-self库](https://pypi.org/project/discord.py-self/) 1.8.1以上，在此感谢。
 
 ## 食用方法
 
 ### 环境依赖
 
-**[Release](https://github.com/Snapmali/discord-monitor/releases)中发布了exe版本，配置过config.json后在Windows下可直接运行，仅需再下载[go-cqhttp](https://github.com/Mrs4s/go-cqhttp)即可。**
-
 基于python3.7版本编写，python3.8版本可正常运行，其他版本未测试。3.4及以下版本应无法运行。同时在Ubuntu 16.04上可正常运行。
 
-外部依赖库：requests, discord.py, plyer, pytz。可分别在命令行中执行`pip install requests` `pip install discord.py` `pip install plyer` `pip install pytz`进行安装。
+外部依赖库：requests, discord.py-self, plyer, pytz。可在命令行中执行 `pipenv install`进行安装。
 
-QQ推送部分依赖[cqhttp-mirai](https://github.com/yyuueexxiinngg/cqhttp-mirai)、[go-cqhttp](https://github.com/Mrs4s/go-cqhttp)等应用实现。其中go-cqhttp的部署较为简单，在其[release](https://github.com/Mrs4s/go-cqhttp/releases)中下载系统对应版本后运行即可，具体使用方法请参阅其文档。
+Line推送部分依赖[line-notify](https://github.com/golbin/line-notify)，具体使用方法请参阅其文档。
 
 
 ### 脚本运行
@@ -44,14 +45,8 @@ QQ推送部分依赖[cqhttp-mirai](https://github.com/yyuueexxiinngg/cqhttp-mira
     "token": "User Token or Bot Token", 
 
     //上述Token是否属于Bot，是则为true，否则为false
-    "is_bot": true, 
+    "is_bot": false, 
 
-    //cqhttp应用的URL，若在本机部署则默认为"http://localhost:5700"
-    "coolq_url": "http://localhost:5700", 
-
-    //cqhttp应用的access token，若未设置access token请留空（即"coolq_token": ""）
-    "coolq_token": "Coolq-http-api access token, leave blank for no token",
-    
     //网络代理的http地址，留空（即"proxy": ""）表示不设置代理
     "proxy": "Proxy URL, leave blank for no proxy, e.g. http://localhost:1080", 
 
@@ -95,17 +90,6 @@ QQ推送部分依赖[cqhttp-mirai](https://github.com/yyuueexxiinngg/cqhttp-mira
         //填0时表示不监听用户动态。
         "server": [1234567890, 9876543210]
         //"server": []
-    },
-
-    //推送设置
-    "push": {
-        //推送的QQ用户或群聊，为嵌套列表。底层列表第一个值为QQ号或群号；
-        //第二个值为布尔型，表示是否推送消息动态；第三个值为布尔型，表示是否推送用户动态。
-        //列表可留空，表示不推送给私聊或群聊。
-        "QQ_group": [[1234567890, true, false], [9876543210, true, true]],
-        "QQ_user": [[1234567890, true, false], [9876543210, true, true]]
-        //"QQ_group": [],
-        //"QQ_user": []
     },
 
     //推送文本格式自定义，此部分建议参阅下文“推送文本自定义”部分

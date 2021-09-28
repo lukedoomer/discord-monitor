@@ -20,12 +20,12 @@ from pytz import timezone as tz
 
 from Log import add_log
 from PushTextProcessor import PushTextProcessor
-from QQPush import QQPush
+from LinePush import LinePush
 
 # Log file path
 log_path = 'discord_monitor.log'
 # Timezone
-timezone = tz('Asia/Shanghai')
+timezone = tz('Asia/Taipei')
 
 img_MIME = ["image/png", "image/jpeg", "image/gif"]
 
@@ -35,18 +35,18 @@ lock = threading.Lock()
 class DiscordMonitor(discord.Client):
 
     def __init__(self, message_user, message_channel, message_channel_name, user_dynamic_user, user_dynamic_server,
-                 do_toast: bool, qq_push: QQPush, push_text_processor: PushTextProcessor,
+                 do_toast: bool, line_push: LinePush, push_text_processor: PushTextProcessor,
                  query_interval=60, **kwargs):
         discord.Client.__init__(self, **kwargs)
+
         self.message_user = message_user
         self.message_channel = message_channel
         self.message_channel_name = message_channel_name
         self.user_dynamic_user = user_dynamic_user
         self.user_dynamic_server = user_dynamic_server
-        self.qq_push = qq_push
+        self.line_push = line_push
         self.push_text_processor = push_text_processor
         self.event_set = set()
-        self.status_dict = {'online': '在线', 'offline': '离线', 'idle': '闲置', 'dnd': '请勿打扰'}
         self.username_dict = {}
         self.nick_dict = {}
         self.interval = query_interval
@@ -117,7 +117,7 @@ class DiscordMonitor(discord.Client):
         image_str = "".join(image_cqcodes)
         content = self.push_text_processor.sub(message.content)
         if self.do_toast:
-            if status == '标注消息':
+            if status == 'TAG':
                 toast_title = '%s #%s %s' % (message.guild.name, message.channel.name, status)
             elif len(self.message_user) != 0:
                 toast_title = '%s %s' % (self.message_user[str(message.author.id)], status)
@@ -132,7 +132,7 @@ class DiscordMonitor(discord.Client):
             attachment_log = '. Attachment: ' + attachment_str
         else:
             attachment_log = ''
-        if status == '发送消息':
+        if status == 'POST':
             t = message.created_at.replace(tzinfo=datetime.timezone.utc).astimezone(timezone).strftime(
                 '%Y/%m/%d %H:%M:%S')
         else:
@@ -161,7 +161,7 @@ class DiscordMonitor(discord.Client):
         else:
             keywords["user_display_name"] = message.author.name + '#' + message.author.discriminator
         push_text = self.push_text_processor.push_text_process(keywords, is_user_dynamic=False)
-        self.qq_push.push_message(push_text, 1)
+        self.line_push.push_message(push_text, attachment_urls)
 
     async def process_user_update(self, before, after, user: discord.Member, status):
         """
@@ -197,7 +197,7 @@ class DiscordMonitor(discord.Client):
                     "time": t,
                     "timezone": timezone.zone}
         push_text = self.push_text_processor.push_text_process(keywords, is_user_dynamic=True)
-        self.qq_push.push_message(push_text, 2)
+        self.line_push.push_message(push_text, None)
 
     async def on_ready(self, *args, **kwargs):
         """
@@ -336,7 +336,7 @@ class DiscordMonitor(discord.Client):
             return
         # 消息标注事件亦会被捕获，同时其content及attachments为空，需特判排除
         if self.is_monitored_object(message.author, message.channel, message.guild) and (message.content != '' or len(message.attachments) > 0):
-            await self.process_message(message, '发送消息')
+            await self.process_message(message, 'POST')
 
     async def on_message_delete(self, message):
         """
@@ -348,7 +348,7 @@ class DiscordMonitor(discord.Client):
         if not self.message_monitoring:
             return
         if self.is_monitored_object(message.author, message.channel, message.guild):
-            await self.process_message(message, '删除消息')
+            await self.process_message(message, 'DELETE')
 
     async def on_message_edit(self, before, after):
         """
@@ -361,7 +361,7 @@ class DiscordMonitor(discord.Client):
         if not self.message_monitoring:
             return
         if self.is_monitored_object(after.author, after.channel, after.guild) and before.content != after.content:
-            await self.process_message(after, '编辑消息')
+            await self.process_message(after, 'EDIT')
 
     async def on_guild_channel_pins_update(self, channel, last_pin):
         """
@@ -377,7 +377,7 @@ class DiscordMonitor(discord.Client):
                 (channel.guild.name in self.message_channel_name and channel.name in self.message_channel_name[channel.guild.name]):
             pins = await channel.pins()
             if len(pins) > 0:
-                await self.process_message(pins[0], '标注消息')
+                await self.process_message(pins[0], 'TAG')
 
     async def on_member_update(self, before, after):
         """
@@ -437,15 +437,6 @@ class DiscordMonitor(discord.Client):
                         self.delete_event(event)
 
     def get_status(self, status):
-        """
-        将api的用户在线状态转换为中文
-
-        :param status: api中的用户在线状态
-        :return: 中文在线状态
-        """
-        status = str(status)
-        if status in self.status_dict:
-            return self.status_dict[status]
         return status
 
     def check_event(self, event):
@@ -494,8 +485,7 @@ def read_config(config_file):
         config_out = dict()
         config_out["token"] = config_json['token']
         config_out["bot"] = config_json['is_bot']
-        config_out["cqhttp_url"] = config_json['coolq_url'].rstrip('/')
-        config_out["cqhttp_token"] = config_json['coolq_token']
+        config_out["linenotify_token"] = config_json['linenotify_token']
         config_out["proxy"] = config_json['proxy']
         config_out["interval"] = config_json['interval']
         config_out["toast"] = config_json['toast']
@@ -504,8 +494,6 @@ def read_config(config_file):
         channel_name_list = config_json['message_monitor']['channel_name']
         config_out["user_dynamic_user_id"] = config_json['user_dynamic_monitor']['user_id']
         config_out["user_dynamic_server"] = set(config_json['user_dynamic_monitor']['server'])
-        config_out["qq_group"] = config_json['push']['QQ_group']
-        config_out["qq_user"] = config_json['push']['QQ_user']
         config_out["message_channel_name"] = dict()
         for guild_ in channel_name_list:
             for i in range(1, len(guild_)):
@@ -522,22 +510,17 @@ def read_config(config_file):
 
 
 if __name__ == '__main__':
-    while True:
-        config_path = 'config.json'
-        try:
-            config_path_temp = input('请输入配置文件路径，空输入则为默认(默认为config.json):\n')
-            if config_path_temp != '':
-                config_path = config_path_temp
-            config = read_config(config_path)
-            break
-        except FileNotFoundError:
-            print('配置文件不存在')
-        except Exception:
-            print('配置文件读取出错，请检查配置文件各参数是否正确')
-            if platform.system() == 'Windows':
-                os.system('pause')
-            sys.exit(1)
-    push = QQPush(config["qq_user"], config["qq_group"], config["cqhttp_url"], config["cqhttp_token"])
+    config_path = 'config.json'
+    try:
+        config = read_config(config_path)
+    except FileNotFoundError:
+        print('配置文件不存在')
+    except Exception:
+        print('配置文件读取出错，请检查配置文件各参数是否正确')
+        if platform.system() == 'Windows':
+            os.system('pause')
+        sys.exit(1)
+    push = LinePush(config["linenotify_token"])
     push_processor = PushTextProcessor(config["message_format"], config["user_dynamic_format"], config["replace"], config["content_cat_dict"])
     intents = discord.Intents.all()
     if config["proxy"] != '':
@@ -568,7 +551,7 @@ if __name__ == '__main__':
     try:
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         print('Logging in...')
-        dc.run(config["token"], bot=config["bot"])
+        dc.run(config["token"])
     except ClientProxyConnectionError:
         print('代理错误，请检查代理设置')
     except (TimeoutError, ClientConnectorError):
